@@ -47,11 +47,9 @@ describe( "Y2K Earthquake V2" , function () {
     let collateralShareValue;
     let arbForkId;
 
-    let AMOUNT_AFTER_FEE = ethers.utils.parseEther("19.95");
+    let DEPOSIT_AMOUNT = ethers.utils.parseEther("10");
     let PREMIUM_DEPOSIT_AMOUNT = ethers.utils.parseEther("2");
     let COLLAT_DEPOSIT_AMOUNT = ethers.utils.parseEther("10");
-    let DEPOSIT_AMOUNT = ethers.utils.parseEther("10");
-    let DEALT_AMOUNT = ethers.utils.parseEther("20");
 
     let begin;
     let end;
