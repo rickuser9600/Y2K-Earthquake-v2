@@ -1,5 +1,7 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
+// const BigNumber = require("bignumber.js");
+const { BigNumber } = ethers;
 const { impersonates, depositVault, setupCoreProtocol, advanceNBlock } = require("./utils/utils.js");
 const { time, loadFixture } = require("@nomicfoundation/hardhat-network-helpers");
 const {CarouselFactoryABI, ControllerABI} = require("./abi/abiCodes.js");
@@ -139,7 +141,7 @@ describe( "Y2K Earthquake V2" , function () {
         
         const marketConfigurationCalldata_nodepeg= {
             token : MIM ,
-            strike : 99900000 ,
+            strike : ethers.BigNumber.from("991000000000000000") ,
             oracle : oracle ,
             underlyingAsset : WETH ,
             name : "MIM Token" ,
@@ -172,6 +174,8 @@ describe( "Y2K Earthquake V2" , function () {
 
         const marketIdToVaults = await vaultFactoryV2.marketIdToVaults(marketId, 0);
         console.log("marketIdToVaults", marketIdToVaults);
+        
+        console.log("marketConfigurationCalldata_nodepeg", marketConfigurationCalldata_nodepeg);
 
         [premium, collateral, marketId] = await vaultFactoryV2.connect(signer).createNewMarket(marketConfigurationCalldata_nodepeg, {gasLimit : 1000000});
 
@@ -196,7 +200,7 @@ describe( "Y2K Earthquake V2" , function () {
 
         [depegEpochId, ] = await vaultFactoryV2.createEpoch(depegMarketId, begin, end, fee);
 
-        const mintWeth = ether.utils.parseEther("100");
+        const mintWeth = ethers.utils.parseEther("100");
         await WethContract.connect(USER).deposit({value: mintWeth});
 
     })

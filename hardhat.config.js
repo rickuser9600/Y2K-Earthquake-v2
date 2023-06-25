@@ -21,7 +21,7 @@ module.exports = {
       forking: {
         // enabled: true,
         url: "https://arb1.arbitrum.io/rpc",
-        blockNumber: 104864494
+        blockNumber: 104886305
       }
     },
     // testnet: {
