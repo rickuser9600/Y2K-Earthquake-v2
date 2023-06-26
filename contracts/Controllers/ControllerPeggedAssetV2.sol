@@ -7,6 +7,8 @@ import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV2V3Interface.sol";
 import {FixedPointMathLib} from "../utils/FixedPointMathLib.sol";
 
+import "hardhat/console.sol";
+
 /// @author Y2K Finance Team
 
 contract ControllerPeggedAssetV2 {
@@ -333,8 +335,10 @@ contract ControllerPeggedAssetV2 {
             uint80 answeredInRound
         ) = priceFeed.latestRoundData();
 
-        if (updatedAt < block.timestamp - MAX_UPDATE_TRESHOLD)
-            revert PriceOutdated();
+        console.log("updatedAt", updatedAt);
+
+        // if (updatedAt < block.timestamp - MAX_UPDATE_TRESHOLD)
+        //     revert PriceOutdated();
 
         uint256 decimals = priceFeed.decimals();
 

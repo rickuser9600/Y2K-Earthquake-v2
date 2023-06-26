@@ -50,6 +50,7 @@ describe( "Y2K Earthquake V2" , function () {
     let DEPOSIT_AMOUNT = ethers.utils.parseEther("10");
     let PREMIUM_DEPOSIT_AMOUNT = ethers.utils.parseEther("2");
     let COLLAT_DEPOSIT_AMOUNT = ethers.utils.parseEther("10");
+    let AMOUNT_AFTER_FEE = ethers.utils.parseEther("19.95");
 
     let begin;
     let end;
@@ -75,114 +76,90 @@ describe( "Y2K Earthquake V2" , function () {
         const signer = await ethers.getSigner(ownerAddress);
 
         WethContract = await ethers.getContractAt('WETH', WETH);
-        console.log("WethContract", WethContract.address)
         
         const TimeLock = await ethers.getContractFactory("TimeLock");
         timeLock = await TimeLock.deploy(ADMIN.address);
         await timeLock.deployed();
-        console.log("timeLock", timeLock.address)
-        console.log("WETH", WETH)
-        console.log("TREASURY", TREASURY)
-
 
         //////////////////////////////////////////////////////////  Mainnet Address   ///////////////////////////////////////////////////////////////////////////
         
-        controller = await ethers.getContractAt(ControllerABI, ControllerAddress); 
-        console.log("controller", controller.address)
+        // controller = await ethers.getContractAt(ControllerABI, ControllerAddress); 
+        // console.log("controller", controller.address)
         
-        vaultFactoryV2 = await ethers.getContractAt(CarouselFactoryABI, CarouselFactoryAddress);
-        console.log("vaultFactoryV2", vaultFactoryV2.address)
+        // vaultFactoryV2 = await ethers.getContractAt(CarouselFactoryABI, CarouselFactoryAddress);
+        // console.log("vaultFactoryV2", vaultFactoryV2.address)
 
-        const treasury = await vaultFactoryV2.treasury();
-        console.log("treasury", treasury);
+        // const treasury = await vaultFactoryV2.treasury();
+        // console.log("treasury", treasury);
         
         /////////////////////////////////////////////////////////////   Creation Address   //////////////////////////////////////////////////////////////////////
         
-        // const VaultV2Creator = await ethers.getContractFactory("VaultV2Creator");
-        // vaultCreator = await VaultV2Creator.deploy();
-        // await vaultCreator.deployed();
-        // console.log("vaultCreator", vaultCreator.address)
+        const VaultV2Creator = await ethers.getContractFactory("VaultV2Creator");
+        vaultCreator = await VaultV2Creator.deploy();
+        await vaultCreator.deployed();
         
-        // const FactoryV2 = await ethers.getContractFactory("VaultFactoryV2");
-        // vaultFactoryV2 = await FactoryV2.deploy(WETH, TREASURY, timeLock.address,{
-        //     libraries:{
-        //         // VaultV2Creator : CarouselFactoryAddress
-        //         VaultV2Creator : vaultCreator.address
-        //     }
-        // });
-        // await vaultFactoryV2.deployed();
-        // console.log("vaultFactoryV2", vaultFactoryV2.address)
+        const FactoryV2 = await ethers.getContractFactory("VaultFactoryV2",{
+            libraries:{
+                VaultV2Creator : vaultCreator.address
+            }
+        });
+        vaultFactoryV2 = await FactoryV2.deploy(WETH, TREASURY, timeLock.address);
+        await vaultFactoryV2.deployed();
         
-        // const ControllerPeggedAssetV2 = await ethers.getContractFactory("ControllerPeggedAssetV2");
-        // controller = await ControllerPeggedAssetV2.deploy(vaultFactoryV2.address, l2sequence);
-        // await controller.deployed();
-        // console.log("controller", controller.address)
+        const ControllerPeggedAssetV2 = await ethers.getContractFactory("ControllerPeggedAssetV2");
+        controller = await ControllerPeggedAssetV2.deploy(vaultFactoryV2.address, l2sequence);
+        await controller.deployed();
 
-        // const controllers1 = await vaultFactoryV2.controllers(controller.address);
-        // console.log("controllers1", controllers1);
+        await vaultFactoryV2.whitelistController(controller.address, {gasLimit : 150000});
 
-        // await vaultFactoryV2.connect(signer).whitelistController(controller.address);
-
-        // const controllers2 = await vaultFactoryV2.controllers(controller.address);
-        // console.log("controllers2", controllers2);
-
-        // const AToken = await ethers.getContractFactory("AToken");
-        // aToken = await AToken.deploy();
-        // await aToken.deployed();
+        const AToken = await ethers.getContractFactory("AToken");
+        aToken = await AToken.deploy();
+        await aToken.deployed();
         
-        // const BToken = await ethers.getContractFactory("BToken");
-        // bToken = await BToken.deploy();
-        // await bToken.deployed();
+        const BToken = await ethers.getContractFactory("BToken");
+        bToken = await BToken.deploy();
+        await bToken.deployed();
         /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-
-        
         const marketConfigurationCalldata_nodepeg= {
-            token : MIM ,
-            strike : ethers.BigNumber.from("991000000000000000") ,
-            oracle : oracle ,
+            token : MIM,
+            strike : "99100000" ,
+            oracle : oracle,
             underlyingAsset : WETH ,
             name : "MIM Token" ,
             tokenURI : "MIM" ,
             controller : controller.address ,
         }
-        // console.log("marketConfigurationCalldata_nodepeg", marketConfigurationCalldata_nodepeg);
 
         const depegStrike = ethers.utils.parseEther("2");
+
         const marketConfigurationCalldata_depeg= {
-            token : USDC ,
-            strike : depegStrike ,
-            oracle : oracle ,
-            underlyingAsset : WETH ,
-            name : "USD Coin" ,
-            tokenURI : "USDC" ,
-            controller : controller.address ,
+            token : USDC,
+            strike : depegStrike,
+            oracle : oracle,
+            underlyingAsset : WETH,
+            name : "USD Coin",
+            tokenURI : "USDC",
+            controller : controller.address,
         }
 
-        // console.log("marketConfigurationCalldata_depeg", marketConfigurationCalldata_depeg);
+        const tx = await vaultFactoryV2.createNewMarket(marketConfigurationCalldata_nodepeg);
+        const receipt = await tx.wait();
 
-        const controllers = await vaultFactoryV2.controllers(controller.address);
-        console.log("controllers", controllers);
-
-        const marketId = await vaultFactoryV2.getMarketId(
-            marketConfigurationCalldata_nodepeg.token, 
-            marketConfigurationCalldata_nodepeg.strike, 
-            marketConfigurationCalldata_nodepeg.underlyingAsset);
-        console.log("marketId", marketId);
-
-        const marketIdToVaults = await vaultFactoryV2.marketIdToVaults(marketId, 0);
-        console.log("marketIdToVaults", marketIdToVaults);
-        
-        console.log("marketConfigurationCalldata_nodepeg", marketConfigurationCalldata_nodepeg);
-
-        [premium, collateral, marketId] = await vaultFactoryV2.connect(signer).createNewMarket(marketConfigurationCalldata_nodepeg, {gasLimit : 1000000});
-
-        console.log("premium", premium)
+        const event = receipt.events.find((e) => e.event === "MarketCreated");
+        marketId = event.args[0];
+        premium = event.args[1];
+        collateral = event.args[2];
 
         const marketIdInfo = await vaultFactoryV2.getMarketInfo(marketId);
-        console.log("marketIdInfo", marketIdInfo);
 
-        [depegPremium, depegCollateral, depegMarketId] = await vaultFactoryV2.connect(signer).createNewMarket(marketConfigurationCalldata_depeg);
+        const tx_depeg = await vaultFactoryV2.createNewMarket(marketConfigurationCalldata_depeg);
+        const receipt_depeg = await tx_depeg.wait();
+
+        const event_depeg = receipt_depeg.events.find((e) => e.event === "MarketCreated");
+        depegMarketId = event_depeg.args[0];
+        depegPremium = event_depeg.args[1];
+        depegCollateral = event_depeg.args[2];
 
         premiumContract = await ethers.getContractAt('VaultV2', premium);
         collateralContract = await ethers.getContractAt('VaultV2', collateral);
@@ -190,43 +167,58 @@ describe( "Y2K Earthquake V2" , function () {
         depegPremiumContract = await ethers.getContractAt('VaultV2', depegPremium);
         depegCollateralContract = await ethers.getContractAt('VaultV2', depegCollateral);
 
-        begin = await time.latest() + (1 * 24 * 60 * 60);
-        end = await time.latest() + (3 * 24 * 60 * 60);
+        begin = await time.latest() + (10 * 24 * 60 * 60);
+        end = await time.latest() + (15 * 24 * 60 * 60);
         fee = 50;
 
-        [epochId, ] = await vaultFactoryV2.createEpoch(marketId, begin, end, fee);
+        const tx_epoch = await vaultFactoryV2.createEpoch(marketId, begin, end, fee);
+        const receipt_epoch = await tx_epoch.wait();
 
-        [depegEpochId, ] = await vaultFactoryV2.createEpoch(depegMarketId, begin, end, fee);
+        const event_epoch = receipt_epoch.events.find((e) => e.event === "EpochCreated");
+        epochId = event_epoch.args[0];
+
+        const tx_epoch_depeg = await vaultFactoryV2.createEpoch(depegMarketId, begin, end, fee);
+        const receipt_epoch_depeg = await tx_epoch_depeg.wait();
+        const event_epoch_epoch = receipt_epoch_depeg.events.find((e) => e.event === "EpochCreated");
+        depegEpochId = event_epoch_epoch.args[0];
 
         const mintWeth = ethers.utils.parseEther("100");
         await WethContract.connect(USER).deposit({value: mintWeth});
+        console.log("before user balance", await WethContract.balanceOf(USER.address));
 
     })
 
     it("test end epoch with no depeg event", async function() {
+        await increaseTime(9);
         await WethContract.connect(USER).approve(premium, DEPOSIT_AMOUNT);
         await WethContract.connect(USER).approve(collateral, DEPOSIT_AMOUNT);
-
+        
         await premiumContract.connect(USER).deposit(epochId, DEPOSIT_AMOUNT, USER.address);
         await collateralContract.connect(USER).deposit(epochId, DEPOSIT_AMOUNT, USER.address);
 
-        console.log(premiumContract.balanceOf(USER.address));
-        console.log(collateralContract.balanceOf(USER.address));
+        console.log("premium user balance", await premiumContract.balanceOf(USER.address, epochId));
+        console.log("collateral user balance", await collateralContract.balanceOf(USER.address, epochId));
+        expect(await premiumContract.balanceOf(USER.address, epochId)).to.be.equal(DEPOSIT_AMOUNT);
+        expect(await collateralContract.balanceOf(USER.address, epochId)).to.be.equal(DEPOSIT_AMOUNT);
         
-        await increaseTime(5);
+        await increaseTime(16);
         
         await controller.triggerEndEpoch(marketId, epochId);
         
         const premiumBalance = await premiumContract.connect(USER).previewWithdraw(epochId, DEPOSIT_AMOUNT);
+        expect(premiumBalance).to.be.equal(0);
         console.log("premiumBalance", premiumBalance);
         
         const collateralBalance = await collateralContract.connect(USER).previewWithdraw(epochId, DEPOSIT_AMOUNT);
+        expect(collateralBalance).to.be.equal(AMOUNT_AFTER_FEE);
         console.log("collateralBalance", collateralBalance);
+        await premiumContract.connect(USER).withdraw(epochId, DEPOSIT_AMOUNT, USER.address, USER.address);
+        await collateralContract.connect(USER).withdraw(epochId, DEPOSIT_AMOUNT, USER.address, USER.address);
 
-        await premiumContract.connect(USER).withdraw(epochId, DEPOSIT_AMOUNT, USER, USER);
-        await collateralContract.connect(USER).withdraw(epochId, DEPOSIT_AMOUNT, USER, USER);
-        console.log(premiumContract.balanceOf(USER.address));
-        console.log(collateralContract.balanceOf(USER.address));
+        expect(await premiumContract.balanceOf(USER.address, DEPOSIT_AMOUNT)).to.be.equal(0);
+        expect(await collateralContract.balanceOf(USER.address, DEPOSIT_AMOUNT)).to.be.equal(0);
+        console.log("after premium balance", await premiumContract.balanceOf(USER.address, DEPOSIT_AMOUNT));
+        console.log("after premium balance", await collateralContract.balanceOf(USER.address, DEPOSIT_AMOUNT));
         
     })
 
@@ -234,32 +226,41 @@ describe( "Y2K Earthquake V2" , function () {
         await WethContract.connect(USER).approve(depegPremium, PREMIUM_DEPOSIT_AMOUNT);
         await WethContract.connect(USER).approve(depegCollateral, COLLAT_DEPOSIT_AMOUNT);
 
-        await depegPremiumContract.connect(USER).deposit(epochId, PREMIUM_DEPOSIT_AMOUNT, USER.address);
-        await depegCollateralContract.connect(USER).deposit(epochId, COLLAT_DEPOSIT_AMOUNT, USER.address);
+        await depegPremiumContract.connect(USER).deposit(depegEpochId, PREMIUM_DEPOSIT_AMOUNT, USER.address);
+        await depegCollateralContract.connect(USER).deposit(depegEpochId, COLLAT_DEPOSIT_AMOUNT, USER.address);
 
-        console.log(depegPremiumContract.balanceOf(USER.address));
-        console.log(depegCollateralContract.balanceOf(USER.address));
+        console.log("depeg premium balance", await depegPremiumContract.balanceOf(USER.address, depegEpochId));
+        console.log("depeg collateral balance", await depegCollateralContract.balanceOf(USER.address, depegEpochId));
+
+        const latestPrice = await controller.getLatestPrice(depegMarketId);
+        console.log("latestPrice ->>>", latestPrice)
+
+        await increaseTime(10.1);
+
+        await controller.triggerDepeg(depegMarketId, depegEpochId, {gasLimit : 3000000});
         
-        await increaseTime(1.5);
-
-        await controller.triggerDepeg(depegMarketId, depegEpochId);
-
-        const premiumfinalTVL = depegCollateralContract.finalTVL(depegEpochId);
-        const collateralfinalTVL = depegPremiumContract.finalTVL(depegEpochId);
+        const premiumfinalTVL = await depegCollateralContract.finalTVL(depegEpochId);
+        const collateralfinalTVL = await depegPremiumContract.finalTVL(depegEpochId);
         console.log("premiumfinalTVL", premiumfinalTVL);
         console.log("collateralfinalTVL", collateralfinalTVL);
 
 
         const premiumShare = await depegPremiumContract.connect(USER).previewWithdraw(depegEpochId, PREMIUM_DEPOSIT_AMOUNT);
         console.log("premiumShare", premiumShare);
+        expect(premiumShare).to.be.equal(BigNumber.from("9950000000000000000"));
+
         
         const collateralShare = await depegCollateralContract.connect(USER).previewWithdraw(depegEpochId, COLLAT_DEPOSIT_AMOUNT);
         console.log("collateralShare", collateralShare);
+        expect(collateralShare).to.be.equal(BigNumber.from("1990000000000000000"));
 
-        await depegPremiumContract.connect(USER).withdraw(depegEpochId, PREMIUM_DEPOSIT_AMOUNT, USER, USER);
-        await depegCollateralContract.connect(USER).withdraw(depegEpochId, COLLAT_DEPOSIT_AMOUNT, USER, USER);
-        console.log(depegPremiumContract.balanceOf(USER.address));
-        console.log(depegCollateralContract.balanceOf(USER.address));
+        await depegPremiumContract.connect(USER).withdraw(depegEpochId, PREMIUM_DEPOSIT_AMOUNT, USER.address, USER.address);
+        await depegCollateralContract.connect(USER).withdraw(depegEpochId, COLLAT_DEPOSIT_AMOUNT, USER.address, USER.address)
+
+        expect(await depegPremiumContract.balanceOf(USER.address, depegEpochId)).to.be.equal(0);
+        expect(await depegCollateralContract.balanceOf(USER.address, depegEpochId)).to.be.equal(0);
+        console.log(await depegPremiumContract.balanceOf(USER.address, depegEpochId));
+        console.log(await depegCollateralContract.balanceOf(USER.address, depegEpochId));
         
     })
 
@@ -268,10 +269,10 @@ describe( "Y2K Earthquake V2" , function () {
         await WethContract.connect(USER).approve(collateral, DEPOSIT_AMOUNT);
 
         await collateralContract.connect(USER).deposit(epochId, COLLAT_DEPOSIT_AMOUNT, USER.address);
-        console.log(premiumContract.balanceOf(USER.address));
-        console.log(collateralContract.balanceOf(USER.address));
+        console.log(await premiumContract.balanceOf(USER.address, epochId));
+        console.log(await collateralContract.balanceOf(USER.address, epochId));
 
-        await increaseTime(5);
+        await increaseTime(16);
         
         await controller.triggerNullEpoch(marketId, epochId);
 

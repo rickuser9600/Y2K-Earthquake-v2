@@ -15,13 +15,13 @@ module.exports = {
   defaultNetwork: "hardhat",
   networks: {
     localhost: {
-      url: "http://127.0.0.1:8545"
+      url: "http://127.0.0.1:8545",
     },
     hardhat: {
       forking: {
         // enabled: true,
         url: "https://arb1.arbitrum.io/rpc",
-        blockNumber: 104886305
+        // blockNumber: 104886305,
       }
     },
     // testnet: {
@@ -46,19 +46,28 @@ module.exports = {
     compilers: [
       {
         version: "0.8.18",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200,
+            details: { yul: false }
+          }
+        },
       },
       {
         version: "0.8.17",
-        settings: {},
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200,
+            details: { yul: false }
+          }
+        },
       },
     ],
-    settings: {
-      optimizer: {
-        enabled: true,
-        runs: 999999
-      }
-    }
+
   },
+  allowUnlimitedContractSize: true,
   // paths: {
   //   sources: "./contracts",
   //   tests: "./test",
