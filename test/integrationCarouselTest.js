@@ -49,7 +49,7 @@ describe( "Y2K Earthquake V2" , function () {
     let DEPOSIT_AMOUNT = ethers.utils.parseEther("10");
     let PREMIUM_DEPOSIT_AMOUNT = ethers.utils.parseEther("2");
     let COLLAT_DEPOSIT_AMOUNT = ethers.utils.parseEther("10");
-    let AMOUNT_AFTER_FEE = ethers.utils.parseEther("19.95");
+    let AFTER_PREMIUM_DEPOSIT_AMOUNT = ethers.utils.parseEther("6");
 
     let begin;
     let end;
@@ -85,45 +85,45 @@ describe( "Y2K Earthquake V2" , function () {
 
         //////////////////////////////////////////////////////////  Mainnet Address   ///////////////////////////////////////////////////////////////////////////
         
-        controller = await ethers.getContractAt(ControllerABI, ControllerAddress); 
-        console.log("controller", controller.address)
+        // controller = await ethers.getContractAt(ControllerABI, ControllerAddress); 
+        // console.log("controller", controller.address)
         
-        carouselFactory = await ethers.getContractAt(CarouselFactoryABI, CarouselFactoryAddress);
-        console.log("carouselFactory", carouselFactory.address)
+        // carouselFactory = await ethers.getContractAt(CarouselFactoryABI, CarouselFactoryAddress);
+        // console.log("carouselFactory", carouselFactory.address)
 
-        const treasury = await carouselFactory.treasury();
-        console.log("treasury", treasury);
+        // const treasury = await carouselFactory.treasury();
+        // console.log("treasury", treasury);
         
         /////////////////////////////////////////////////////////////   Creation Address   //////////////////////////////////////////////////////////////////////
-        // const CarouselCreator = await ethers.getContractFactory("CarouselCreator");
-        // carouselCreator = await CarouselCreator.deploy();
-        // await carouselCreator.deployed();
-        
-        // const CarouselFactory = await ethers.getContractFactory("CarouselFactory",{
-        //     libraries:{
-        //         CarouselCreator : carouselCreator.address
-        //     }
-        // });
-        // carouselFactory = await CarouselFactory.deploy(WETH, TREASURY, timeLock.address, emissionTokenAddress);
-        // await carouselFactory.deployed();
-        
-        // const ControllerPeggedAssetV2 = await ethers.getContractFactory("ControllerPeggedAssetV2");
-        // controller = await ControllerPeggedAssetV2.deploy(carouselFactory.address, l2sequence);
-        // await controller.deployed();
+        const AToken = await ethers.getContractFactory("AToken");
+        aToken = await AToken.deploy();
+        await aToken.deployed();
 
-        // await carouselFactory.whitelistController(controller.address, {gasLimit : 150000});
-
-        // const AToken = await ethers.getContractFactory("AToken");
-        // aToken = await AToken.deploy();
-        // await aToken.deployed();
+        const CarouselCreator = await ethers.getContractFactory("CarouselCreator", {gasLimit : 1500000});
+        carouselCreator = await CarouselCreator.deploy();
+        await carouselCreator.deployed();
+        console.log("carouselCreator", carouselCreator);
         
-        // const BToken = await ethers.getContractFactory("BToken");
-        // bToken = await BToken.deploy();
-        // await bToken.deployed();
+        const CarouselFactory = await ethers.getContractFactory("CarouselFactory",{
+            libraries:{
+                CarouselCreator : carouselCreator.address
+            }
+        });
+        carouselFactory = await CarouselFactory.deploy(WETH, TREASURY, timeLock.address, aToken.address);
+        await carouselFactory.deployed();
+        console.log("carouselFactory", carouselFactory);
+        
+        const ControllerPeggedAssetV2 = await ethers.getContractFactory("ControllerPeggedAssetV2");
+        controller = await ControllerPeggedAssetV2.deploy(carouselFactory.address, l2sequence);
+        await controller.deployed();
+
+        await carouselFactory.whitelistController(controller.address, {gasLimit : 150000});
+
+        
         /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         depositFee = 50;
-        relayerFee = ethers.utils.formatUnits(2, 'gwei');
+        relayerFee = ethers.utils.parseUnits("2", 'gwei');
 
         const carouselMarketConfigurationCalldata= {
             token : USDC,
@@ -133,7 +133,7 @@ describe( "Y2K Earthquake V2" , function () {
             name : "USD Coin",
             tokenURI : "USDC",
             controller : controller.address,
-            relayerFee : 2,
+            relayerFee : relayerFee,
             depositFee : depositFee,
             minQueueDeposit : ethers.utils.parseEther("1")
         }
@@ -174,52 +174,135 @@ describe( "Y2K Earthquake V2" , function () {
         premiumEmissions = ethers.utils.parseEther("1000");
         collatEmissions = ethers.utils.parseEther("100");
 
+        await aToken.mint(TREASURY, 5000);
+        await aToken.approve(carouselFactory.address, ethers.utils.parseEther("5000"));
+
         const tx_epoch = await carouselFactory.createEpochWithEmissions(marketId, begin, end, fee, premiumEmissions, collatEmissions);
         const receipt_epoch = await tx_epoch.wait();
-
         const event_epoch = receipt_epoch.events.find((e) => e.event === "EpochCreatedWithEmissions");
         epochId = event_epoch.args[0];
 
-        nextEpochBegin = uint40(block.timestamp - 10 hours);
-        nextEpochEnd = uint40(block.timestamp - 5 hours);
+        nextEpochBegin = await time.latest() + (10 * 24 * 60 * 60);
+        nextEpochEnd = await time.latest() + (11 * 24 * 60 * 60);
+
+        const tx_epoch_next = await carouselFactory.createEpochWithEmissions(marketId, begin, end, fee, premiumEmissions, collatEmissions);
+        const receipt_epoch_next = await tx_epoch_next.wait();
+        const event_epoch_next = receipt_epoch_next.events.find((e) => e.event === "EpochCreatedWithEmissions");
+        nextEpochId = event_epoch_next.args[0];
+
 
         const mintWeth = ethers.utils.parseEther("100");
         await WethContract.connect(USER).deposit({value: mintWeth});
+        await WethContract.connect(USER2).deposit({value: mintWeth});
         console.log("before user balance", await WethContract.balanceOf(USER.address));
+        console.log("before user balance2", await WethContract.balanceOf(USER2.address));
 
     })
 
-    it("test end epoch with no depeg event", async function() {
-        await increaseTime(9);
-        await WethContract.connect(USER).approve(premium, DEPOSIT_AMOUNT);
-        await WethContract.connect(USER).approve(collateral, DEPOSIT_AMOUNT);
+    it("test epoch with carousel", async function() {
+        await increaseTime(4);
+        await WethContract.connect(USER).approve(premium, PREMIUM_DEPOSIT_AMOUNT);
+        await WethContract.connect(USER).approve(collateral, COLLAT_DEPOSIT_AMOUNT);
         
-        await premiumContract.connect(USER).deposit(epochId, DEPOSIT_AMOUNT, USER.address);
-        await collateralContract.connect(USER).deposit(epochId, DEPOSIT_AMOUNT, USER.address);
+        await premiumContract.connect(USER).deposit(epochId, PREMIUM_DEPOSIT_AMOUNT, USER.address);
+        await collateralContract.connect(USER).deposit(epochId, COLLAT_DEPOSIT_AMOUNT, USER.address);
 
         console.log("premium user balance", await premiumContract.balanceOf(USER.address, epochId));
         console.log("collateral user balance", await collateralContract.balanceOf(USER.address, epochId));
-        expect(await premiumContract.balanceOf(USER.address, epochId)).to.be.equal(DEPOSIT_AMOUNT);
-        expect(await collateralContract.balanceOf(USER.address, epochId)).to.be.equal(DEPOSIT_AMOUNT);
+        expect(await premiumContract.balanceOf(USER.address, epochId)).to.be.equal(PREMIUM_DEPOSIT_AMOUNT);
+        expect(await collateralContract.balanceOf(USER.address, epochId)).to.be.equal(COLLAT_DEPOSIT_AMOUNT);
         
-        await increaseTime(16);
+        await WethContract.connect(USER2).approve(collateral, COLLAT_DEPOSIT_AMOUNT);
+        await collateralContract.connect(USER2).deposit(epochId, COLLAT_DEPOSIT_AMOUNT, USER2.address);
+        console.log("collateral user balance", await collateralContract.balanceOf(USER2.address, epochId));
+
+        collateralQueueLength = 2;
+        premiumQueueLength = 1;
+
+        expect(await collateralContract.getDepositQueueLength()).to.be.equal(collateralQueueLength);
+        expect(await premiumContract.getDepositQueueLength()).to.be.equal(premiumQueueLength);
+
+        await collateralContract.mintDepositInQueue(epochId, collateralQueueLength);
+        await premiumContract.mintDepositInQueue(epochId, premiumQueueLength);
+
+        const collateralBalanceAfterFee = await collateralContract.getEpochDepositFee(epochId, COLLAT_DEPOSIT_AMOUNT);
+        console.log(collateralBalanceAfterFee.assetsAfterFee)
+        const premiumBalanceAfterFee = await premiumContract.getEpochDepositFee(epochId, PREMIUM_DEPOSIT_AMOUNT);
+        console.log(premiumBalanceAfterFee.assetsAfterFee)
+
+        console.log(await collateralContract.balanceOf(USER.address, epochId));
+        console.log(await collateralContract.balanceOf(USER2.address, epochId));
+        console.log(await premiumContract.balanceOf(USER.address, epochId));
+        console.log(await premiumContract.balanceOf(USER2.address, epochId));
+        // expect(await collateralContract.balanceOf(USER.address, epochId)).to.be.equal(collateralBalanceAfterFee.assetsAfterFee - relayerFee)
+
+        collateralContract.connect(USER).enlistInRollover(epochId, ethers.utils.parseEther("8"), USER.address);
+        const isEnlisted = collateralContract.isEnlistedInRolloverQueue(USER.address);
+        expect(isEnlisted).to.be.equal(true);
+
+        collateralContract.connect(USER2).enlistInRollover(epochId, ethers.utils.parseEther("8"), USER2.address);
+        const isEnlisted2 = collateralContract.isEnlistedInRolloverQueue(USER2.address);
+        expect(isEnlisted2).to.be.equal(true);
         
+        await increaseTime(9);
+
         await controller.triggerEndEpoch(marketId, epochId);
         
-        const premiumBalance = await premiumContract.connect(USER).previewWithdraw(epochId, DEPOSIT_AMOUNT);
-        expect(premiumBalance).to.be.equal(0);
-        console.log("premiumBalance", premiumBalance);
+        const premiumTotalBalance = await premiumContract.previewWithdraw(epochId, PREMIUM_DEPOSIT_AMOUNT);
+        console.log("premiumTotalBalance", premiumTotalBalance);
         
-        const collateralBalance = await collateralContract.connect(USER).previewWithdraw(epochId, DEPOSIT_AMOUNT);
-        expect(collateralBalance).to.be.equal(AMOUNT_AFTER_FEE);
-        console.log("collateralBalance", collateralBalance);
-        await premiumContract.connect(USER).withdraw(epochId, DEPOSIT_AMOUNT, USER.address, USER.address);
-        await collateralContract.connect(USER).withdraw(epochId, DEPOSIT_AMOUNT, USER.address, USER.address);
+        const collateralTotalBalance = await collateralContract.previewWithdraw(epochId, COLLAT_DEPOSIT_AMOUNT);
+        console.log("collateralTotalBalance", collateralTotalBalance);
 
-        expect(await premiumContract.balanceOf(USER.address, DEPOSIT_AMOUNT)).to.be.equal(0);
-        expect(await collateralContract.balanceOf(USER.address, DEPOSIT_AMOUNT)).to.be.equal(0);
-        console.log("after premium balance", await premiumContract.balanceOf(USER.address, DEPOSIT_AMOUNT));
-        console.log("after premium balance", await collateralContract.balanceOf(USER.address, DEPOSIT_AMOUNT));
+        await collateralContract.mintRollovers(nextEpochId, 2);
+        expect(await collateralContract.rolloverAccounting(nextEpochId)).to.be.equal(2);
+
+        const collateralMinusFee = await collateralContract.connect(USER).previewWithdraw(epochId, ethers.utils.parseEther("2"));
+        console.log("collateralMinusFee", collateralMinusFee);
+
+        await collateralContract.connect(USER).withdraw(epochId, ethers.utils.parseEther("2") - depositFee - relayerFee, USER.address, USER.address);
+        await collateralContract.connect(USER2).withdraw(epochId, ethers.utils.parseEther("2") - depositFee - relayerFee, USER2.address, USER2.address);
+
+        await WethContract.connect(USER).approve(premium, AFTER_PREMIUM_DEPOSIT_AMOUNT);
+        await premiumContract.connect(USER).deposit(nextEpochId, AFTER_PREMIUM_DEPOSIT_AMOUNT, USER.address);
+
+        await increaseTime(12);
+        await controller.triggerEndEpoch(marketId, nextEpochId);
+
+        const premiumNextTotalBalance = await premiumContract.previewWithdraw(epochId, AFTER_PREMIUM_DEPOSIT_AMOUNT);
+        console.log("premiumNextTotalBalance", premiumNextTotalBalance);
+        
+        const collateralNextTotalBalance = await collateralContract.previewWithdraw(epochId, ethers.utils.parseEther("16"));
+        console.log("collateralNextTotalBalance", collateralNextTotalBalance);
+
+        const beforeQueueLength = await collateralContract.connect(USER).getRolloverQueueLength();
+        await collateralContract.connect(USER).delistInRollover(USER.address);
+
+        const isEnlistedAfter = collateralContract.isEnlistedInRolloverQueue(USER.address);
+        expect(isEnlistedAfter).to.be.equal(false);
+
+        const collateralBalanceInNextEpoch = await collateralContract.balanceOf(USER.address, nextEpochId);
+        const expectValue = ethers.utils.parseEther("8") - relayerFee;
+        expect(collateralBalanceInNextEpoch).to.be.equal(expectValue);
+        const premiumBalanceInNextEpoch = await collateralContract.balanceOf(USER.address, nextEpochId);
+
+        await collateralContract.connect(USER).withdraw(nextEpochId, collateralBalanceInNextEpoch, USER.address, USER.address);
+        await premiumContract.connect(USER).withdraw(nextEpochId, premiumBalanceInNextEpoch, USER.address, USER.address);
+
+        expect(await collateralContract.connect(ADMIN).getRolloverQueueLength()).to.be.equal(2);
+
+        const beforeQueueLength2 = await collateralContract.connect(USER2).getRolloverQueueLength();
+        await collateralContract.connect(USER2).delistInRollover(USER2.address);
+
+        const collateralBalanceInNextEpoch2 = await collateralContract.balanceOf(USER2.address, nextEpochId);
+        expect(collateralBalanceInNextEpoch2).to.be.equal(expectValue);
+
+        await collateralContract.connect(USER2).withdraw(nextEpochId, collateralBalanceInNextEpoch2, USER2.address, USER2.address);
+
+        expect(await premiumContract.balanceOf(USER.address, nextEpochId)).to.be.equal(0);
+        expect(await premiumContract.balanceOf(USER2.address, nextEpochId)).to.be.equal(0);
+        expect(await collateralContract.balanceOf(USER.address, nextEpochId)).to.be.equal(0);
+        expect(await collateralContract.balanceOf(USER2.address, nextEpochId)).to.be.equal(0);
         
     })
 

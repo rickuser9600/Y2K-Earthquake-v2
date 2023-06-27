@@ -37,13 +37,18 @@ module.exports = {
     //   accounts: {mnemonic: process.env.SECRET_KEY}
     // }
   },
-  // etherscan: {
-  //   // Your API key for Etherscan
-  //   // Obtain one at https://bscscan.com/
-  //   apiKey: process.env.apiKey 
-  // },
   solidity: {
     compilers: [
+      {
+        version: "0.8.19",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200,
+            details: { yul: false }
+          }
+        },
+      },
       {
         version: "0.8.18",
         settings: {
@@ -59,15 +64,29 @@ module.exports = {
         settings: {
           optimizer: {
             enabled: true,
-            runs: 200,
+            runs: 500,
             details: { yul: false }
           }
         },
       },
     ],
+    settings: {
+      optimizer: {
+        enabled: true,
+        runs: 200,
+        details: { yul: false }
+      }
+    },
 
   },
   allowUnlimitedContractSize: true,
+  
+  etherscan: {
+    // Your API key for Etherscan
+    // Obtain one at https://bscscan.com/
+    apiKey: process.env.apiKey 
+  },
+
   // paths: {
   //   sources: "./contracts",
   //   tests: "./test",
